@@ -1,0 +1,360 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 수집된 포털 정보기반 딥크롤링\n",
+    "* 기존에 수집된 정보를 바탕으로 매체별 크롤링\n",
+    "* 다양한 서브 데이터의 정형화\n",
+    "* URL 기반의 다양한 크롤링 기법 사용"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 분석요소\n",
+    "* 제목 :\n",
+    "* 내용  :\n",
+    "* 작성일 :\n",
+    "* 매체: \n",
+    "* 작성자:\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### 기존 수집 데이터 활용\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import numpy as np\n",
+    "import pandas as pd\n",
+    "import requests\n",
+    "from bs4 import BeautifulSoup as bsp\n",
+    "import matplotlib\n",
+    "import matplotlib.pyplot as plt\n",
+    "import sqlite3\n",
+    "import re\n",
+    "from datetime import datetime, timedelta,date\n",
+    "import sys"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def calcDate(txt=''):\n",
+    "    #print(txt)\n",
+    "    rdate=''\n",
+    "    nowd=datetime.now()\n",
+    "    pattern='[^\\d]'\n",
+    "    num=int(re.sub(pattern,'',txt))\n",
+    "    if('일' in txt):\n",
+    "        res=nowd + timedelta(days=num*-1)\n",
+    "    elif('.' in txt):\n",
+    "        ds=txt.replace('.','-')\n",
+    "        #print(ds)\n",
+    "        res=ds+' 00:00:00.000000'\n",
+    "    else:\n",
+    "        res=nowd + timedelta(hours=num*-1)\n",
+    "    return res"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "'2021-2-1 00:00:00.000000'"
+      ]
+     },
+     "execution_count": 11,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "calcDate('2021.2.1')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def makeKey(txt=''):\n",
+    "    txt_=re.sub('http\\S*//',' ',txt)\n",
+    "    key=re.sub('[^a-zA-Z0-9%]','',txt_)\n",
+    "    return key"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 49,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def getData(whr=''):\n",
+    "    dbname='navernews.db'\n",
+    "    with sqlite3.connect(dbname) as conn:\n",
+    "        cursor=conn.cursor()\n",
+    "        sql='select nidx,ncomp,nurl from nnews '+whr\n",
+    "        res=cursor.execute(sql).fetchall()\n",
+    "    return(res)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 14,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def insSub(d):\n",
+    "    dbname='navernews.db'\n",
+    "    with sqlite3.connect(dbname) as conn:\n",
+    "        cursor=conn.cursor()\n",
+    "        sql='select * from subnews where nkey=\"'+d[5]+'\"'\n",
+    "        res=cursor.execute(sql).fetchall()\n",
+    "        if(len(res)>0):\n",
+    "            print(\"이미 존재 합니다.:\"+d[1])\n",
+    "        else:\n",
+    "            sql='insert into subnews (ncate,ntitle,ncomp,ndate,nurl,nkey) values(?,?,?,?,?,?)'\n",
+    "            res=cursor.execute(sql,d)\n",
+    "            print('.',end='')\n",
+    "        "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 116,
+   "metadata": {
+    "collapsed": true,
+    "jupyter": {
+     "outputs_hidden": true
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "['신세계 총수 일가 지난해 연봉 142억원…정용진 33억·정유경 29억', '임춘한 기자 choon@asiae.co.kr', '2021-03-17 15:53', '정용진 신세계그룹 부회장. [이미지출처=연합뉴스]\\n\\n\\n썝蹂몃낫湲 븘씠肄\\n\\n[아시아경제 임춘한 기자] 신세계그룹 총수 일가가 지난해 신세계와 이마트로부터 142억원 가량을 보수로 받은 것으로 나타났다.17일 신세계와 이마트의 사업보고서에 따르면 정용진 신세계그룹 부회장은 지난해 이마트에서 급여 20억3400만원, 명절 상여와 성과급 등이 더해진 상여 13억3400만원 등 총 33억6800만원을 받았다.\\t\\n\\n정유경 신세계 총괄사장은 신세계에서 급여 17억9400만원, 상여로 11억6600만원 등 총 29억6000만원을 받았다.정 부회장의 연봉은 2019년(35억6200만원)보다 1억9400만원 줄었다. 정 총괄사장의 연봉 역시 2019년(31억1400만원) 대비 1억5400만원 감소했다.정 부회장과 정 총괄사장의 모친인 이명희 신세계그룹 회장은 지난해 신세계에서 12억6100만원, 이마트에서 26억9300만원 등 총 39억5400만원을 연봉으로 받았고, 이 회장의 남편인 정재은 신세계그룹 명예회장도 같은 액수를 수령했다.\\t\\n\\n신세계그룹 관계자는 정 부회장과 정 총괄사장의 연봉이 전년 대비 감소한 이유에 대해 \"코로나19으로 업황에 영향이 있다 보니 회사의 실적과 연동되는 상여가 줄면서 보수가 감소했다\"고 말했다.', 69, '아시아경제', 'https://view.asiae.co.kr/article/2021031715545233623']\n"
+     ]
+    }
+   ],
+   "source": [
+    "def getAsia(urls):\n",
+    "    url=urls[2]\n",
+    "    res=requests.get(url)\n",
+    "    src=res.content.strip()\n",
+    "    htmls=bsp(src,'html.parser')\n",
+    "    title_block=htmls.select('div.area_title')[0]\n",
+    "    wtitle=title_block.select('h3')[0].text.strip()\n",
+    "    writer=htmls.select('.article_view > .article .e_article')[0].text.strip()\n",
+    "    wday_=title_block.select('p.user_data')\n",
+    "    wday=str(wday_).split('</strong>')[-1].replace('</p>]','').replace('.','-').strip()\n",
+    "    #print(wday)\n",
+    "    article_=htmls.select('.article_view > .article ')[0]\n",
+    "    pattern='<!-- 본문// -->[\\S\\s]*'\n",
+    "    article__=re.sub(pattern,' ',str(article_))\n",
+    "    warticle=bsp(article__,'html.parser').text.strip()\n",
+    "    #print(warticle)\n",
+    "    \"\"\"\n",
+    "    pattern='<script[^>]*>((\\n|\\r|.)*?)<\\/script>'\n",
+    "    article__=re.sub(pattern,' ',str(article_))\n",
+    "    \"\"\"\n",
+    "    return [wtitle,writer,wday,warticle,urls[0],urls[1],urls[2]]\n",
+    "    #return [wtitle,wday,urls[0],urls[1],urls[2]]\n",
+    "urls=(69, '아시아경제', 'https://view.asiae.co.kr/article/2021031715545233623')\n",
+    "#print(getAsia(urls))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 111,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def getDonga(urls):\n",
+    "    url=urls[2]\n",
+    "    res=requests.get(url)\n",
+    "    src=res.content.strip()\n",
+    "    htmls=bsp(src,'html.parser')\n",
+    "    title_block=htmls.select('div.article_title')[0]\n",
+    "    wtitle=title_block.select('h1.title')[0].text.strip()\n",
+    "    writer=title_block.select('span.report')[0].text.replace('동아닷컴 기자','').strip()\n",
+    "    wday=title_block.select('span.date01')[-1].text.strip()\n",
+    "    article_=htmls.select('div.article_txt')[0]\n",
+    "    pattern='<script[^>]*>((\\n|\\r|.)*?)<\\/script>'\n",
+    "    article__=re.sub(pattern,' ',str(article_))\n",
+    "    pattern='<div id=\"bestnews_layer\">.*'\n",
+    "    article__=re.sub(pattern,' ',str(article__))\n",
+    "    warticle=bsp(article__,'html.parser').text\n",
+    "    return [wtitle,writer,wday,warticle,urls[0],urls[1],urls[2]]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 112,
+   "metadata": {
+    "jupyter": {
+     "source_hidden": true
+    }
+   },
+   "outputs": [],
+   "source": [
+    "def getDona(url):\n",
+    "    res=requests.get(url)\n",
+    "    src=res.content.strip()\n",
+    "    htmls=bsp(src,'html.parser')\n",
+    "    print(url)\n",
+    "    title_block=htmls.select('div.article_title')\n",
+    "    if(len(tgts)==0):\n",
+    "        print('데이터가 없습니다.'+url)\n",
+    "        sys.exit(1)\n",
+    "    for tgt in tgts:\n",
+    "        mainarti=tgt.select('div.news_wrap')\n",
+    "        subartis=tgt.select('ul.list_cluster > li.sub_bx')\n",
+    "        if(len(mainarti)>0):\n",
+    "            title_= mainarti[0].select('a.news_tit')[0].text\n",
+    "            title=re.sub('[^ㄱ-힣0-9 a-zA-Z]',' ',title_)\n",
+    "            comp=mainarti[0].select('.info.press')[0].text.replace('언론사 선정','')\n",
+    "            date_=mainarti[0].select('span.info')[0].text.replace('시간 전','')\n",
+    "            date=calcDate(date_)\n",
+    "            url=mainarti[0].select('a.news_tit')[0]['href']\n",
+    "            key=makeKey(url)\n",
+    "            opt=1\n",
+    "            d=(opt,title,comp,date,url,key)\n",
+    "            insMain(d)\n",
+    "            for subarti in subartis:\n",
+    "                title_= subarti.select('a.sub_tit')[0].text\n",
+    "                title=re.sub('[^ㄱ-힣0-9 a-zA-Z]',' ',title_)\n",
+    "                comp=subarti.select('.sub_txt.press')[0].text.replace('언론사 선정','')\n",
+    "                date_=subarti.select('span.sub_txt')[0].text.replace('시간 전','').replace('네이버뉴스','')\n",
+    "                date=calcDate(date_)\n",
+    "                url=subarti.select('a.sub_tit')[0]['href']\n",
+    "                key=makeKey(url)\n",
+    "                opt=2\n",
+    "                d=(opt,title,comp,date,url,key)\n",
+    "                insMain(d)\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 113,
+   "metadata": {
+    "collapsed": true,
+    "jupyter": {
+     "outputs_hidden": true
+    }
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "[(67, '동아일보', 'https://www.donga.com/news/article/all/20210317/105923783/2'),\n",
+       " (68,\n",
+       "  '이데일리',\n",
+       "  'http://www.edaily.co.kr/news/newspath.asp?newsid=03483366628984304'),\n",
+       " (69, '아시아경제', 'https://view.asiae.co.kr/article/2021031715545233623'),\n",
+       " (70,\n",
+       "  '조선비즈',\n",
+       "  'https://biz.chosun.com/site/data/html_dir/2021/03/17/2021031702122.html?utm_source=naver&utm_medium=original&utm_campaign=biz'),\n",
+       " (71,\n",
+       "  '한국경제TV',\n",
+       "  'http://www.wowtv.co.kr/NewsCenter/News/Read?articleId=A202103170256&t=NN')]"
+      ]
+     },
+     "execution_count": 113,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "allurl=getData()\n",
+    "allurl[:5]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 121,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "--------------------------------------------------\n",
+      "['신세계 정용진 지난해 연봉 33억…코로나19 영향으로 일부 감소', '김혜린', '수정 2021-03-17 14:45', '\\n신세계그룹 제공 정용진 신세계그룹 부회장이 지난해 연봉으로 33억 6800만 원을 받았다. 신세계 그룹 총수 일가는 총 142억 원을 수령했다.17일 신세계·이마트 사업보고서에 따르면 정 부회장은 지난해 이마트에서 총 33억 6800만 원을 받았다. 급여 20억 3400만 원과 상여 13억 3400만 원이다.이마트 측은 “어려운 대내외 경영 환경 속에서도 매출액 14조 2138억 원과 영업이익 2950억 원을 달성한 점을 고려했다”고 밝혔다.\\n\\n동생 정유경 신세계 총괄사장은 급여와 상여금 각각 17억 9400만 원, 11억 6600만 원으로 총 29억 6000만 원을 수령했다.\\n주요기사\\n\\n안철수 “김종인-오세훈 요구한 단일화 방안 수용할 것”“시민 선택에 맡기겠다” 안철수 ‘양보 승부수’\\n\\n신세계 측은 “기존 백화점 경쟁력 강화로 어려운 대내외 환경 속에서도 영업이익 1268억 원을 달성한 점을 고려했다”고 전했다. 정 부회장과 정 총괄사장 모두 연봉이 전년 대비 감소한 것으로 나타났다. 정 부회장은 약 1억 9400만 원, 정 총괄사장은 1억 5400만 원가량을 덜 받았다. 이는 신종 코로나바이러스 감염증(코로나19) 사태로 실적이 감소한 영향으로 보인다.이명희 신세계그룹 회장은 이마트에서 26억 9300만 원, 신세계에서 12억 6100만 원으로 총 39억 5400만 원을 받았다. 정재은 명예회장도 이와 동일한 연봉을 수령했다.김혜린 동아닷컴 기자 sinnala8@donga.com\\n', 67, '동아일보', 'https://www.donga.com/news/article/all/20210317/105923783/2']\n",
+      "--------------------------------------------------\n",
+      "\n",
+      "--------------------------------------------------\n",
+      "['신세계 총수 일가 지난해 연봉 142억원…정용진 33억·정유경 29억', '임춘한 기자 choon@asiae.co.kr', '2021-03-17 15:53', '정용진 신세계그룹 부회장. [이미지출처=연합뉴스]\\n\\n\\n썝蹂몃낫湲 븘씠肄\\n\\n[아시아경제 임춘한 기자] 신세계그룹 총수 일가가 지난해 신세계와 이마트로부터 142억원 가량을 보수로 받은 것으로 나타났다.17일 신세계와 이마트의 사업보고서에 따르면 정용진 신세계그룹 부회장은 지난해 이마트에서 급여 20억3400만원, 명절 상여와 성과급 등이 더해진 상여 13억3400만원 등 총 33억6800만원을 받았다.\\t\\n\\n정유경 신세계 총괄사장은 신세계에서 급여 17억9400만원, 상여로 11억6600만원 등 총 29억6000만원을 받았다.정 부회장의 연봉은 2019년(35억6200만원)보다 1억9400만원 줄었다. 정 총괄사장의 연봉 역시 2019년(31억1400만원) 대비 1억5400만원 감소했다.정 부회장과 정 총괄사장의 모친인 이명희 신세계그룹 회장은 지난해 신세계에서 12억6100만원, 이마트에서 26억9300만원 등 총 39억5400만원을 연봉으로 받았고, 이 회장의 남편인 정재은 신세계그룹 명예회장도 같은 액수를 수령했다.\\t\\n\\n신세계그룹 관계자는 정 부회장과 정 총괄사장의 연봉이 전년 대비 감소한 이유에 대해 \"코로나19으로 업황에 영향이 있다 보니 회사의 실적과 연동되는 상여가 줄면서 보수가 감소했다\"고 말했다.', 69, '아시아경제', 'https://view.asiae.co.kr/article/2021031715545233623']\n"
+     ]
+    }
+   ],
+   "source": [
+    "for urls in allurl[:3]:\n",
+    "    print('-'*50)\n",
+    "    wdata=''\n",
+    "    #print(nidx,ncomp,turl)\n",
+    "    if urls[1]==\"동아일보\":\n",
+    "        wdata=getDonga(urls)\n",
+    "    elif urls[1]==\"아시아경제\":\n",
+    "        wdata=getAsia(urls)\n",
+    "    print(wdata)\n",
+    "    "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.8.5"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}
